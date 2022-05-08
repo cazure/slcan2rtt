@@ -15,6 +15,11 @@
 #include "drivers/can.h"
 #endif /* RT_USING_CAN */
 
+#define DBG_TAG "slcan"
+#define DBG_LVL DBG_INFO
+#include <rtdbg.h>
+
+
 void slcan_rtcan_set_baud(rt_slcan_t* slcan_instance, uint8_t baud_index);
 void slcan_rtcan_set_mode(rt_slcan_t* slcan_instance, uint8_t mode_index);
 
@@ -81,7 +86,7 @@ void slcan_rtcan_open(rt_slcan_t* slcan_instance)
 	int rc = rt_device_open(slcan_instance->candev, slcan_instance->candev_oflag);
 	RT_ASSERT(rc == RT_EOK);
 	rt_device_set_rx_indicate(slcan_instance->candev, slcan_instance->candev_rx_call);
-	rt_kprintf("open:%s  %d\n",slcan_instance->candev_name,rc);
+	LOG_D("open:%s  %d\n",slcan_instance->candev_name,rc);
 	slcan_rtcan_set_baud(slcan_instance, slcan_instance->slcan_baud_index);
 	slcan_rtcan_set_mode(slcan_instance, slcan_instance->slcan_mode_index);
 }
@@ -90,14 +95,14 @@ void slcan_rtcan_close(rt_slcan_t* slcan_instance)
 {
 	int rc = rt_device_close(slcan_instance->candev);
 	RT_ASSERT(rc == RT_EOK);
-	rt_kprintf("close:%s  %d\n",slcan_instance->candev_name,rc);
+	LOG_D("close:%s  %d\n",slcan_instance->candev_name,rc);
 }
 
 void slcan_rtcan_set_baud(rt_slcan_t* slcan_instance, uint8_t baud_index)
 {
 	slcan_instance->slcan_baud_index = baud_index;
 	slcan_instance->candev_baud = can_baud_sclcan2rtthread(slcan_instance->slcan_baud_index);
-  rt_kprintf("set baud : %s [%d] %d\n", slcan_instance->candev_name, slcan_instance->slcan_baud_index, slcan_instance->candev_baud);
+  LOG_D("set baud : %s [%d] %d\n", slcan_instance->candev_name, slcan_instance->slcan_baud_index, slcan_instance->candev_baud);
 	rt_device_control(slcan_instance->candev, RT_CAN_CMD_SET_BAUD, (void *)slcan_instance->candev_baud);
 }
 
@@ -105,7 +110,7 @@ void slcan_rtcan_set_mode(rt_slcan_t* slcan_instance, uint8_t mode_index)
 {
 	slcan_instance->slcan_mode_index = mode_index;
 	slcan_instance->candev_mode = can_mode_sclcan2rtthread(slcan_instance->slcan_mode_index);
-	rt_kprintf("set mode : %s [%d] %d\n", slcan_instance->candev_name, slcan_instance->slcan_mode_index, slcan_instance->candev_mode);
+	LOG_D("set mode : %s [%d] %d\n", slcan_instance->candev_name, slcan_instance->slcan_mode_index, slcan_instance->candev_mode);
 	rt_device_control(slcan_instance->candev, RT_CAN_CMD_SET_MODE, (void *)slcan_instance->candev_mode);
 }
 
@@ -124,15 +129,15 @@ void slcan_rtchar_open(rt_slcan_t* slcan_instance)
 {
 	int rc = rt_device_open(slcan_instance->chardev, slcan_instance->chardev_oflag);
 	RT_ASSERT(rc == RT_EOK);
-	rt_kprintf("open:%s  %d\n",slcan_instance->chardev_name,rc);
 	rt_device_set_rx_indicate(slcan_instance->chardev, slcan_instance->chardev_rx_call);
+	LOG_D("open:%s  %d\n",slcan_instance->chardev_name,rc);
 }
 
 void slcan_rtchar_close(rt_slcan_t* slcan_instance)
 {
 	int rc = rt_device_close(slcan_instance->chardev);
 	RT_ASSERT(rc == RT_EOK);
-	rt_kprintf("close:%s  %d\n",slcan_instance->chardev_name,rc);
+	LOG_D("close:%s  %d\n",slcan_instance->chardev_name,rc);
 }
 
 rt_size_t slcan_rtchar_read(rt_slcan_t* slcan_instance, void* buffer, rt_size_t size)
@@ -165,7 +170,7 @@ static int asc2nibble(char c)
 	return 16; /* error */
 }
 
-int hexstr2int(char* strbuffer, uint8_t strlen)
+static int hexstr2int(char* strbuffer, uint8_t strlen)
 {
 	uint32_t numcount = 0;
 	int8_t num = 0;
@@ -438,14 +443,14 @@ void slcan_process_serial(rt_slcan_t* slcan_instance)
 	buffer_len += rc;
 	if(buffer_len > 0)
 	{
-		rt_kprintf("[%s >> %s] (%d %d) %s  \n",slcan_instance->chardev_name, slcan_instance->candev_name,buffer_len,rc, rx_buffer);
+		LOG_D("[%s >> %s] (%d %d) %s  \n",slcan_instance->chardev_name, slcan_instance->candev_name,buffer_len,rc, rx_buffer);
 	}
 	slcan_instance->chardev_rx_remain = 0;
 	rc = slcan_parse_ascii(slcan_instance, slcan_instance->chardev_rx_buffer, buffer_len);
 	slcan_instance->chardev_rx_remain = rc;
 	rt_memset(&(slcan_instance->chardev_rx_buffer[slcan_instance->chardev_rx_remain]), 0, (sizeof(slcan_instance->chardev_rx_buffer) - slcan_instance->chardev_rx_remain));
 	
-	rt_kprintf("[%s >> %s] (%d ) %s\n",slcan_instance->chardev_name, slcan_instance->candev_name,slcan_instance->chardev_rx_remain, rx_buffer);
+	LOG_D("[%s >> %s] (%d ) %s\n",slcan_instance->chardev_name, slcan_instance->candev_name,slcan_instance->chardev_rx_remain, rx_buffer);
 	
 }
 
@@ -505,7 +510,7 @@ static int slcan_can2ascii(rt_slcan_t* slcan_instance, rt_can_msg_t msg, char *t
 	if(slcan_instance->timestamp_isopen > 0)
 	{
 		uint32_t tick = rt_tick_get();
-		rt_rt_sprintf( &tx_buffer[pos], "%04lX", (tick & 0x0000FFFF) );
+		rt_sprintf( &tx_buffer[pos], "%04lX", (tick & 0x0000FFFF) );
 		pos += 4;
 	}
 	/* end */
@@ -533,7 +538,7 @@ void slcan_process_can(rt_slcan_t* slcan_instance)
 			return;
 		}
 		slcan_rtchar_write(slcan_instance, slcan_instance->chardev_tx_buffer, tx_len);
-		rt_kprintf("[%s << %s] %s\n",slcan_instance->chardev_name, slcan_instance->candev_name, slcan_instance->chardev_tx_buffer);
+		LOG_D("[%s << %s] %s\n",slcan_instance->chardev_name, slcan_instance->candev_name, slcan_instance->chardev_tx_buffer);
 	}while(1);
 }
 
@@ -541,7 +546,7 @@ void slcan_process_can(rt_slcan_t* slcan_instance)
 void slcan_process_task(void *p)
 {
 	rt_slcan_t* slcan_instance = p;
-	rt_kprintf("[%s <=> %s] slcan start\n",slcan_instance->chardev_name, slcan_instance->candev_name);
+	LOG_D("[%s <=> %s] slcan start\n",slcan_instance->chardev_name, slcan_instance->candev_name);
 	slcan_rtchar_open(slcan_instance);
 	slcan_rtcan_open(slcan_instance);
 	slcan_instance->candev_isopen = 1;
