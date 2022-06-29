@@ -16,8 +16,15 @@
 #endif /* RT_USING_CAN */
 
 #define DBG_TAG "slcan"
-#define DBG_LVL DBG_INFO
+//#define DBG_LVL DBG_INFO
+#define DBG_LVL DBG_LOG
 #include <rtdbg.h>
+
+
+#define SLCAN_LOG_E(instance,fmt, ...)   if(instance->set_flag & SLCAN_SFLAG_LOG){LOG_E(fmt, ##__VA_ARGS__);}
+#define SLCAN_LOG_W(instance,fmt, ...)   if(instance->set_flag & SLCAN_SFLAG_LOG){LOG_W(fmt, ##__VA_ARGS__);}
+#define SLCAN_LOG_I(instance,fmt, ...)   if(instance->set_flag & SLCAN_SFLAG_LOG){LOG_I(fmt, ##__VA_ARGS__);}
+#define SLCAN_LOG_D(instance,fmt, ...)   if(instance->set_flag & SLCAN_SFLAG_LOG){LOG_D(fmt, ##__VA_ARGS__);}
 
 
 void slcan_rtcan_set_baud(rt_slcan_t* slcan_instance, uint8_t baud_index);
@@ -80,29 +87,54 @@ uint32_t  can_mode_sclcan2rtthread(uint8_t can_mode_index)
     return mode;
 }
 
-
 void slcan_rtcan_open(rt_slcan_t* slcan_instance)
 {
+    if( (slcan_instance->candev == NULL) || (slcan_instance->run_flag & SLCAN_RFLAG_CAN_OPEN) )
+    {
+        return;
+    }
+    if(slcan_instance->set_flag & SLCAN_SFLAG_MODE)
+    {
+        slcan_rtcan_set_mode(slcan_instance, slcan_instance->slcan_mode_index);
+    }
+    if(slcan_instance->set_flag & SLCAN_SFLAG_BUADRATE)
+    {
+        slcan_rtcan_set_baud(slcan_instance, slcan_instance->slcan_baud_index);
+    }
+
     int rc = rt_device_open(slcan_instance->candev, slcan_instance->candev_oflag);
-    RT_ASSERT(rc == RT_EOK);
+    if(rc != RT_EOK)
+    {
+        slcan_instance->run_flag |= SLCAN_RFLAG_EXIT;
+        slcan_instance->run_flag &= ~SLCAN_RFLAG_CAN_OPEN;
+    }else {
+        slcan_instance->run_flag |= SLCAN_RFLAG_CAN_OPEN;
+    }
     rt_device_set_rx_indicate(slcan_instance->candev, slcan_instance->candev_rx_call);
-    LOG_D("open:%s  %d\n",slcan_instance->candev_name,rc);
-    slcan_rtcan_set_baud(slcan_instance, slcan_instance->slcan_baud_index);
-    slcan_rtcan_set_mode(slcan_instance, slcan_instance->slcan_mode_index);
+    SLCAN_LOG_D(slcan_instance, "%d = rt_device_open(\"%s\",0x%04X);", rc, slcan_instance->candev_name, slcan_instance->candev_oflag);
 }
 
 void slcan_rtcan_close(rt_slcan_t* slcan_instance)
 {
+    if( (slcan_instance->candev == NULL) || (!(slcan_instance->run_flag & SLCAN_RFLAG_CAN_OPEN)) )
+    {
+        return;
+    }
     int rc = rt_device_close(slcan_instance->candev);
-    RT_ASSERT(rc == RT_EOK);
-    LOG_D("close:%s  %d\n",slcan_instance->candev_name,rc);
+    if(rc != RT_EOK)
+    {
+        slcan_instance->run_flag |= SLCAN_RFLAG_EXIT;
+    }else {
+        slcan_instance->run_flag &= ~SLCAN_RFLAG_CAN_OPEN;
+    }
+    SLCAN_LOG_D(slcan_instance, "%d = rt_device_close(\"%s\");", rc, slcan_instance->candev_name);
 }
 
 void slcan_rtcan_set_baud(rt_slcan_t* slcan_instance, uint8_t baud_index)
 {
     slcan_instance->slcan_baud_index = baud_index;
     slcan_instance->candev_baud = can_baud_sclcan2rtthread(slcan_instance->slcan_baud_index);
-  LOG_D("set baud : %s [%d] %d\n", slcan_instance->candev_name, slcan_instance->slcan_baud_index, slcan_instance->candev_baud);
+    SLCAN_LOG_D(slcan_instance, "set baud : %s [%d] %d", slcan_instance->candev_name, slcan_instance->slcan_baud_index, slcan_instance->candev_baud);
     rt_device_control(slcan_instance->candev, RT_CAN_CMD_SET_BAUD, (void *)slcan_instance->candev_baud);
 }
 
@@ -110,7 +142,7 @@ void slcan_rtcan_set_mode(rt_slcan_t* slcan_instance, uint8_t mode_index)
 {
     slcan_instance->slcan_mode_index = mode_index;
     slcan_instance->candev_mode = can_mode_sclcan2rtthread(slcan_instance->slcan_mode_index);
-    LOG_D("set mode : %s [%d] %d\n", slcan_instance->candev_name, slcan_instance->slcan_mode_index, slcan_instance->candev_mode);
+    SLCAN_LOG_D(slcan_instance, "set mode : %s [%d] %d", slcan_instance->candev_name, slcan_instance->slcan_mode_index, slcan_instance->candev_mode);
     rt_device_control(slcan_instance->candev, RT_CAN_CMD_SET_MODE, (void *)slcan_instance->candev_mode);
 }
 
@@ -124,20 +156,38 @@ rt_size_t slcan_rtcan_write(rt_slcan_t* slcan_instance, rt_can_msg_t msg)
     return rt_device_write(slcan_instance->candev, 0, msg, sizeof(struct rt_can_msg));
 }
 
-
 void slcan_rtchar_open(rt_slcan_t* slcan_instance)
 {
+    if( (slcan_instance->chardev == NULL) || ((slcan_instance->run_flag & SLCAN_RFLAG_CHAR_OPEN)) )
+    {
+        return;
+    }
     int rc = rt_device_open(slcan_instance->chardev, slcan_instance->chardev_oflag);
-    RT_ASSERT(rc == RT_EOK);
+    if(rc != RT_EOK)
+    {
+        slcan_instance->run_flag |= SLCAN_RFLAG_EXIT;
+        slcan_instance->run_flag &= ~SLCAN_RFLAG_CHAR_OPEN;
+    }else {
+        slcan_instance->run_flag |= SLCAN_RFLAG_CHAR_OPEN;
+    }
     rt_device_set_rx_indicate(slcan_instance->chardev, slcan_instance->chardev_rx_call);
-    LOG_D("open:%s  %d\n",slcan_instance->chardev_name,rc);
+    SLCAN_LOG_D(slcan_instance, "%d = rt_device_open(\"%s\",0x%04X);", rc, slcan_instance->chardev_name, slcan_instance->chardev_oflag);
 }
 
 void slcan_rtchar_close(rt_slcan_t* slcan_instance)
 {
+    if( (slcan_instance->chardev == NULL) || (!(slcan_instance->run_flag & SLCAN_RFLAG_CHAR_OPEN)) )
+    {
+        return;
+    }
     int rc = rt_device_close(slcan_instance->chardev);
-    RT_ASSERT(rc == RT_EOK);
-    LOG_D("close:%s  %d\n",slcan_instance->chardev_name,rc);
+    if(rc != RT_EOK)
+    {
+        slcan_instance->run_flag |= SLCAN_RFLAG_EXIT;
+    }else {
+        slcan_instance->run_flag &= ~SLCAN_RFLAG_CHAR_OPEN;
+    }
+    SLCAN_LOG_D(slcan_instance, "%d = rt_device_close(\"%s\");", rc, slcan_instance->chardev_name);
 }
 
 rt_size_t slcan_rtchar_read(rt_slcan_t* slcan_instance, void* buffer, rt_size_t size)
@@ -149,7 +199,6 @@ rt_size_t slcan_rtchar_write(rt_slcan_t* slcan_instance, void* buffer, rt_size_t
 {
     return rt_device_write(slcan_instance->chardev, 0, buffer, size);
 }
-
 
 rt_size_t slcan_wait(rt_slcan_t* slcan_instance,rt_int32_t time)
 {
@@ -246,7 +295,12 @@ parse_restart:
 
     /* check for timestamp on/off command */
     if (cmd == 'Z') {
-        slcan_instance->timestamp_isopen = buf[1] & 0x01;
+        if((buf[1] & 0x01))
+        {
+            slcan_instance->set_flag |= SLCAN_SFLAG_TIMESTAMP;
+        }else {
+            slcan_instance->set_flag &= ~SLCAN_SFLAG_TIMESTAMP;
+        }
         rx_out_len = 1;
         bytes_used = 2;
         goto rx_out_ack;
@@ -255,7 +309,6 @@ parse_restart:
     /* check for 'O'pen command */
     if (cmd == 'O') {
         slcan_rtcan_open(slcan_instance);
-        slcan_instance->candev_isopen = 1;
         rx_out_len = 1;
         bytes_used = 1;
         goto rx_out_ack;
@@ -264,7 +317,6 @@ parse_restart:
     /* check for 'C'lose command */
     if (cmd == 'C') {
         slcan_rtcan_close(slcan_instance);
-        slcan_instance->candev_isopen = 0;
         rx_out_len = 1;
         bytes_used = 1;
         goto rx_out_ack;
@@ -414,6 +466,15 @@ rx_out:
     if(rx_out_len > 0)
     {
         slcan_rtchar_write(slcan_instance, replybuf, rx_out_len);
+        SLCAN_LOG_D(slcan_instance, "[%s] reply:%d ",slcan_instance->chardev_name, rx_out_len);
+        if(slcan_instance->set_flag & SLCAN_SFLAG_LOG)
+        {
+            for(int i=0;i<rx_out_len;i++)
+            {
+                LOG_RAW("%02X ",replybuf[i]);
+            }
+            LOG_RAW("\n");
+        }
     }
     /* check if there is another command in this buffer */
     if (bytes_count > bytes_used) {
@@ -432,29 +493,32 @@ parse_exit:
 void slcan_process_serial(rt_slcan_t* slcan_instance)
 {
     int rc = 0;
+    int buffer_max = sizeof(slcan_instance->chardev_rx_buffer);
     uint8_t *rx_buffer = slcan_instance->chardev_rx_buffer;
     int buffer_len = slcan_instance->chardev_rx_remain;
 
-    rc = slcan_rtchar_read( slcan_instance, &(rx_buffer[buffer_len]), (sizeof(slcan_instance->chardev_rx_buffer) - buffer_len) );
+    rc = slcan_rtchar_read( slcan_instance, &(rx_buffer[buffer_len]), (buffer_max - buffer_len) );
     if((buffer_len <= 0) && (rc <= 0) )
     {
         return;
     }
     buffer_len += rc;
-    if(buffer_len > 0)
+    if(rc > 0)
     {
-        LOG_D("[%s >> %s] (%d %d) %s  \n",slcan_instance->chardev_name, slcan_instance->candev_name,buffer_len,rc, rx_buffer);
+        SLCAN_LOG_D(slcan_instance, "[%s >> %s] len:%d+%d buffer:%s ",slcan_instance->chardev_name, slcan_instance->candev_name,buffer_len,rc, rx_buffer);
     }
     slcan_instance->chardev_rx_remain = 0;
     rc = slcan_parse_ascii(slcan_instance, slcan_instance->chardev_rx_buffer, buffer_len);
     slcan_instance->chardev_rx_remain = rc;
-    rt_memset(&(slcan_instance->chardev_rx_buffer[slcan_instance->chardev_rx_remain]), 0, (sizeof(slcan_instance->chardev_rx_buffer) - slcan_instance->chardev_rx_remain));
 
-    LOG_D("[%s >> %s] (%d ) %s\n",slcan_instance->chardev_name, slcan_instance->candev_name,slcan_instance->chardev_rx_remain, rx_buffer);
+    rt_memset(&(slcan_instance->chardev_rx_buffer[slcan_instance->chardev_rx_remain]), 0, (buffer_max - slcan_instance->chardev_rx_remain));
 
+    if(buffer_len != slcan_instance->chardev_rx_remain)
+    {
+        //when buffer_len != remain print
+        SLCAN_LOG_D(slcan_instance, "[%s >> %s] remain:%d buffer:%s ",slcan_instance->chardev_name, slcan_instance->candev_name,slcan_instance->chardev_rx_remain, rx_buffer);
+    }
 }
-
-
 
 static int slcan_can2ascii(rt_slcan_t* slcan_instance, rt_can_msg_t msg, char *tx_buffer)
 {
@@ -507,7 +571,7 @@ static int slcan_can2ascii(rt_slcan_t* slcan_instance, rt_can_msg_t msg, char *t
         }
     }
     /* timestamp */
-    if(slcan_instance->timestamp_isopen > 0)
+    if(slcan_instance->set_flag & SLCAN_SFLAG_TIMESTAMP)
     {
         uint32_t tick = rt_tick_get();
         rt_sprintf( &tx_buffer[pos], "%04lX", (tick & 0x0000FFFF) );
@@ -530,32 +594,132 @@ void slcan_process_can(rt_slcan_t* slcan_instance)
         read_rc = slcan_rtcan_read(slcan_instance, &(slcan_instance->can_msg) );
         if(read_rc != sizeof(struct rt_can_msg) )
         {
-            return;
+            break;
         }
         tx_len = slcan_can2ascii(slcan_instance, &(slcan_instance->can_msg) , (char *)slcan_instance->chardev_tx_buffer );
         if(tx_len <= 0)
         {
-            return;
+            break;
         }
+        SLCAN_LOG_D(slcan_instance, "[%s << %s] len:%d buffer:%s",slcan_instance->chardev_name, slcan_instance->candev_name, tx_len, slcan_instance->chardev_tx_buffer);
         slcan_rtchar_write(slcan_instance, slcan_instance->chardev_tx_buffer, tx_len);
-        LOG_D("[%s << %s] %s\n",slcan_instance->chardev_name, slcan_instance->candev_name, slcan_instance->chardev_tx_buffer);
     }while(1);
 }
 
 
-void slcan_process_task(void *p)
+void slcan_process_task(void *instance)
 {
-    rt_slcan_t* slcan_instance = p;
-    LOG_D("[%s <=> %s] slcan start\n",slcan_instance->chardev_name, slcan_instance->candev_name);
+    rt_slcan_t* slcan_instance = instance;
+
+    slcan_instance->run_state = 1;
+    slcan_instance->run_flag = 0;
     slcan_rtchar_open(slcan_instance);
     slcan_rtcan_open(slcan_instance);
-    slcan_instance->candev_isopen = 1;
-    while(1)
+    SLCAN_LOG_D(slcan_instance, "[%s <=> %s] slcan start",slcan_instance->chardev_name, slcan_instance->candev_name);
+
+    while(!(slcan_instance->run_flag & SLCAN_RFLAG_EXIT))
     {
+        //wait sem
         slcan_wait(slcan_instance,RT_WAITING_FOREVER);
+        // process can bus data
         slcan_process_can(slcan_instance);
+        // process char data
         slcan_process_serial(slcan_instance);
     }
+    slcan_rtchar_close(slcan_instance);
+    slcan_rtcan_close(slcan_instance);
+    SLCAN_LOG_D(slcan_instance, "[%s <=> %s] slcan exit",slcan_instance->chardev_name, slcan_instance->candev_name);
+    slcan_instance->run_state = 0;
+}
+
+void slcan_instance_exit(rt_slcan_t* slcan_instance)
+{
+    slcan_instance->run_flag |= SLCAN_RFLAG_EXIT;
+    //rt_sem_release
+    if(slcan_instance->candev_rx_call != NULL)
+    {
+        slcan_instance->candev_rx_call(slcan_instance->candev, 0);
+    }
+    if(slcan_instance->chardev_rx_call != NULL)
+    {
+        slcan_instance->chardev_rx_call(slcan_instance->chardev, 0);
+    }
+    while(slcan_instance->run_state != 0)
+    {
+        //延时让出cpu给slcan线程操作
+        rt_thread_mdelay(1);
+    }
+    rt_sem_detach(&(slcan_instance->rx_sem));
+//    if(slcan_instance->tid != NULL)
+//    {
+//        rt_thread_delete(slcan_instance->tid);
+//    }
+    slcan_instance->tid = NULL;
+}
+
+int slcan_instance_startup(rt_slcan_t * slcan_instance, char *name,  rt_uint32_t stack_size, rt_uint8_t  priority, rt_uint32_t tick)
+{
+    if( (slcan_instance == NULL) || (name == NULL) )
+    {
+        goto _fail;
+    }
+    if( slcan_instance->run_state > 0)
+    {
+        goto _exit;
+    }
+    rt_sem_init(&(slcan_instance->rx_sem), name , 0, RT_IPC_FLAG_FIFO);
+
+    if(slcan_instance->tid == NULL)
+    {
+        //is NULL
+        slcan_instance->tid = rt_thread_create( name, slcan_process_task, slcan_instance , stack_size, priority, tick);
+    }
+    if (slcan_instance->tid != RT_NULL)
+    {
+        rt_thread_startup(slcan_instance->tid);
+    }
+_exit:
+    return slcan_instance->run_state;
+_fail:
+    return -1;
+}
+
+rt_slcan_t* slcan_instance_create(char * chardev_name, char * candev_name)
+{
+    rt_slcan_t* slcan_instance = NULL;
+    if( (chardev_name== NULL) && (candev_name== NULL) )
+    {
+        goto _fail;
+    }
+    slcan_instance = rt_malloc( sizeof(rt_slcan_t) );
+    if(slcan_instance == NULL)
+    {
+        goto _fail;
+    }
+    rt_memset(slcan_instance, 0, sizeof(rt_slcan_t));
+
+    slcan_instance->chardev_name = chardev_name;
+    slcan_instance->chardev = rt_device_find(slcan_instance->chardev_name);
+    slcan_instance->chardev_oflag = RT_DEVICE_FLAG_INT_RX;
+
+    slcan_instance->candev_name = candev_name;
+    slcan_instance->candev = rt_device_find(slcan_instance->candev_name);
+    slcan_instance->candev_oflag = RT_DEVICE_FLAG_INT_TX | RT_DEVICE_FLAG_INT_RX;
+
+    if( (slcan_instance->chardev == NULL) || (slcan_instance->candev == NULL))
+    {
+        rt_free(slcan_instance);
+        slcan_instance = NULL;
+    }
+_fail:
+    return slcan_instance;
+}
+
+void slcan_instance_delete(rt_slcan_t * slcan_instance)
+{
+    slcan_instance_exit(slcan_instance);
+
+    rt_free(slcan_instance);
 }
 
 

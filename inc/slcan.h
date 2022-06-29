@@ -22,6 +22,17 @@ extern "C" {
 #define SLCAN_STD_ID_LEN 3
 #define SLCAN_EFF_ID_LEN 8
 
+/* RUN FLAG */
+#define SLCAN_RFLAG_CAN_OPEN           0x0001
+#define SLCAN_RFLAG_CHAR_OPEN          0x0002
+#define SLCAN_RFLAG_EXIT               0x8000
+
+/* SET FLAG */
+#define SLCAN_SFLAG_MODE            0x0001
+#define SLCAN_SFLAG_BUADRATE        0x0002
+#define SLCAN_SFLAG_TIMESTAMP       0x0004
+#define SLCAN_SFLAG_LOG             0x0008
+
 
 typedef struct rt_slcan
 {
@@ -42,37 +53,50 @@ typedef struct rt_slcan
 
     uint8_t      slcan_baud_index;
     uint8_t      slcan_mode_index;
-    uint8_t      timestamp_isopen;
-    uint8_t      candev_isopen;
+
+    uint16_t     run_state;
+    uint16_t     run_flag;
+    uint16_t     set_flag;
 
     uint16_t     chardev_rx_remain;
     uint8_t      chardev_rx_buffer[SLCAN_MTU + SLCAN_MTU];
     uint8_t      chardev_tx_buffer[SLCAN_MTU];
 
+    rt_thread_t  tid;
 }rt_slcan_t;
 
 
 enum slcan_baud
 {
-    SLCAN_BAUD_10K = 0,
-    SLCAN_BAUD_20K,
-    SLCAN_BAUD_50K,
-    SLCAN_BAUD_100K,
-    SLCAN_BAUD_125K,
-    SLCAN_BAUD_250K,
-    SLCAN_BAUD_500K,
-    SLCAN_BAUD_800K,
-    SLCAN_BAUD_1000K,
-    SLCAN_BAUD_INVALID,
+SLCAN_BAUD_10K = 0,
+SLCAN_BAUD_20K,
+SLCAN_BAUD_50K,
+SLCAN_BAUD_100K,
+SLCAN_BAUD_125K,
+SLCAN_BAUD_250K,
+SLCAN_BAUD_500K,
+SLCAN_BAUD_800K,
+SLCAN_BAUD_1000K,
+SLCAN_BAUD_INVALID,
 };
 
 enum slcan_mode
 {
- SLCAN_MODE_NORMAL = 0,
- SLCAN_MODE_LISEN,
- SLCAN_MODE_LOOPBACK,
- SLCAN_MODE_LOOPBACKANLISEN,
+SLCAN_MODE_NORMAL = 0,
+SLCAN_MODE_LISEN,
+SLCAN_MODE_LOOPBACK,
+SLCAN_MODE_LOOPBACKANLISEN,
 };
+
+void slcan_process_task(void *instance);
+
+int slcan_instance_startup(rt_slcan_t * slcan_instance, char *name,  rt_uint32_t stack_size, rt_uint8_t  priority, rt_uint32_t tick);
+
+void slcan_instance_exit(rt_slcan_t* slcan_instance);
+
+rt_slcan_t* slcan_instance_create(char * chardev_name, char * candev_name);
+
+void slcan_instance_delete(rt_slcan_t * slcan_instance);
 
 #ifdef __cplusplus
 }
