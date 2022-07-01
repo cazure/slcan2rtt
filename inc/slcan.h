@@ -38,15 +38,15 @@ typedef struct rt_slcan
 {
     rt_device_t  candev;
     rt_err_t     (*candev_rx_call)(rt_device_t dev, rt_size_t size);
-    char *       candev_name;
+    const char * candev_name;
     int          candev_oflag;
     uint32_t     candev_baud;
     uint32_t     candev_mode;
 
-    rt_device_t  chardev;
-    rt_err_t     (*chardev_rx_call)(rt_device_t dev, rt_size_t size);
-    char *       chardev_name;
-    int          chardev_oflag;
+    rt_device_t  serialdev;
+    rt_err_t     (*serialdev_rx_call)(rt_device_t dev, rt_size_t size);
+    const char * serialdev_name;
+    int          serialdev_oflag;
 
     struct rt_semaphore  rx_sem;
     struct rt_can_msg   can_msg;
@@ -58,9 +58,9 @@ typedef struct rt_slcan
     uint16_t     run_flag;
     uint16_t     set_flag;
 
-    uint16_t     chardev_rx_remain;
-    uint8_t      chardev_rx_buffer[SLCAN_MTU + SLCAN_MTU];
-    uint8_t      chardev_tx_buffer[SLCAN_MTU];
+    uint16_t     char_rx_remain;
+    uint8_t      char_rx_buffer[SLCAN_MTU + SLCAN_MTU];
+    uint8_t      char_tx_buffer[SLCAN_MTU];
 
     rt_thread_t  tid;
 }rt_slcan_t;
@@ -94,7 +94,7 @@ int slcan_instance_startup(rt_slcan_t * slcan_instance, char *name,  rt_uint32_t
 
 void slcan_instance_exit(rt_slcan_t* slcan_instance);
 
-rt_slcan_t* slcan_instance_create(char * chardev_name, char * candev_name);
+rt_slcan_t* slcan_instance_create(const char * serialdev_name, const char * candev_name);
 
 void slcan_instance_delete(rt_slcan_t * slcan_instance);
 

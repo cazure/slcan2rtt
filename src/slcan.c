@@ -156,13 +156,13 @@ rt_size_t slcan_rtcan_write(rt_slcan_t* slcan_instance, rt_can_msg_t msg)
     return rt_device_write(slcan_instance->candev, 0, msg, sizeof(struct rt_can_msg));
 }
 
-void slcan_rtchar_open(rt_slcan_t* slcan_instance)
+void slcan_rtserial_open(rt_slcan_t* slcan_instance)
 {
-    if( (slcan_instance->chardev == NULL) || ((slcan_instance->run_flag & SLCAN_RFLAG_CHAR_OPEN)) )
+    if( (slcan_instance->serialdev == NULL) || ((slcan_instance->run_flag & SLCAN_RFLAG_CHAR_OPEN)) )
     {
         return;
     }
-    int rc = rt_device_open(slcan_instance->chardev, slcan_instance->chardev_oflag);
+    int rc = rt_device_open(slcan_instance->serialdev, slcan_instance->serialdev_oflag);
     if(rc != RT_EOK)
     {
         slcan_instance->run_flag |= SLCAN_RFLAG_EXIT;
@@ -170,34 +170,34 @@ void slcan_rtchar_open(rt_slcan_t* slcan_instance)
     }else {
         slcan_instance->run_flag |= SLCAN_RFLAG_CHAR_OPEN;
     }
-    rt_device_set_rx_indicate(slcan_instance->chardev, slcan_instance->chardev_rx_call);
-    SLCAN_LOG_D(slcan_instance, "%d = rt_device_open(\"%s\",0x%04X);", rc, slcan_instance->chardev_name, slcan_instance->chardev_oflag);
+    rt_device_set_rx_indicate(slcan_instance->serialdev, slcan_instance->serialdev_rx_call);
+    SLCAN_LOG_D(slcan_instance, "%d = rt_device_open(\"%s\",0x%04X);", rc, slcan_instance->serialdev_name, slcan_instance->serialdev_oflag);
 }
 
-void slcan_rtchar_close(rt_slcan_t* slcan_instance)
+void slcan_rtserial_close(rt_slcan_t* slcan_instance)
 {
-    if( (slcan_instance->chardev == NULL) || (!(slcan_instance->run_flag & SLCAN_RFLAG_CHAR_OPEN)) )
+    if( (slcan_instance->serialdev == NULL) || (!(slcan_instance->run_flag & SLCAN_RFLAG_CHAR_OPEN)) )
     {
         return;
     }
-    int rc = rt_device_close(slcan_instance->chardev);
+    int rc = rt_device_close(slcan_instance->serialdev);
     if(rc != RT_EOK)
     {
         slcan_instance->run_flag |= SLCAN_RFLAG_EXIT;
     }else {
         slcan_instance->run_flag &= ~SLCAN_RFLAG_CHAR_OPEN;
     }
-    SLCAN_LOG_D(slcan_instance, "%d = rt_device_close(\"%s\");", rc, slcan_instance->chardev_name);
+    SLCAN_LOG_D(slcan_instance, "%d = rt_device_close(\"%s\");", rc, slcan_instance->serialdev_name);
 }
 
-rt_size_t slcan_rtchar_read(rt_slcan_t* slcan_instance, void* buffer, rt_size_t size)
+rt_size_t slcan_rtserial_read(rt_slcan_t* slcan_instance, void* buffer, rt_size_t size)
 {
-    return rt_device_read(slcan_instance->chardev, 0, buffer, size);
+    return rt_device_read(slcan_instance->serialdev, 0, buffer, size);
 }
 
-rt_size_t slcan_rtchar_write(rt_slcan_t* slcan_instance, void* buffer, rt_size_t size)
+rt_size_t slcan_rtserial_write(rt_slcan_t* slcan_instance, void* buffer, rt_size_t size)
 {
-    return rt_device_write(slcan_instance->chardev, 0, buffer, size);
+    return rt_device_write(slcan_instance->serialdev, 0, buffer, size);
 }
 
 rt_size_t slcan_wait(rt_slcan_t* slcan_instance,rt_int32_t time)
@@ -465,8 +465,8 @@ rx_out_nack:
 rx_out:
     if(rx_out_len > 0)
     {
-        slcan_rtchar_write(slcan_instance, replybuf, rx_out_len);
-        SLCAN_LOG_D(slcan_instance, "[%s] reply:%d ",slcan_instance->chardev_name, rx_out_len);
+        slcan_rtserial_write(slcan_instance, replybuf, rx_out_len);
+        SLCAN_LOG_D(slcan_instance, "[%s] reply:%d ",slcan_instance->serialdev_name, rx_out_len);
         if(slcan_instance->set_flag & SLCAN_SFLAG_LOG)
         {
             for(int i=0;i<rx_out_len;i++)
@@ -493,11 +493,11 @@ parse_exit:
 void slcan_process_serial(rt_slcan_t* slcan_instance)
 {
     int rc = 0;
-    int buffer_max = sizeof(slcan_instance->chardev_rx_buffer);
-    uint8_t *rx_buffer = slcan_instance->chardev_rx_buffer;
-    int buffer_len = slcan_instance->chardev_rx_remain;
+    int buffer_max = sizeof(slcan_instance->char_rx_buffer);
+    uint8_t *rx_buffer = slcan_instance->char_rx_buffer;
+    int buffer_len = slcan_instance->char_rx_remain;
 
-    rc = slcan_rtchar_read( slcan_instance, &(rx_buffer[buffer_len]), (buffer_max - buffer_len) );
+    rc = slcan_rtserial_read( slcan_instance, &(rx_buffer[buffer_len]), (buffer_max - buffer_len) );
     if((buffer_len <= 0) && (rc <= 0) )
     {
         return;
@@ -505,18 +505,18 @@ void slcan_process_serial(rt_slcan_t* slcan_instance)
     buffer_len += rc;
     if(rc > 0)
     {
-        SLCAN_LOG_D(slcan_instance, "[%s >> %s] len:%d+%d buffer:%s ",slcan_instance->chardev_name, slcan_instance->candev_name,buffer_len,rc, rx_buffer);
+        SLCAN_LOG_D(slcan_instance, "[%s >> %s] len:%d+%d buffer:%s ", slcan_instance->serialdev_name, slcan_instance->candev_name, buffer_len, rc, rx_buffer);
     }
-    slcan_instance->chardev_rx_remain = 0;
-    rc = slcan_parse_ascii(slcan_instance, slcan_instance->chardev_rx_buffer, buffer_len);
-    slcan_instance->chardev_rx_remain = rc;
+    slcan_instance->char_rx_remain = 0;
+    rc = slcan_parse_ascii(slcan_instance, slcan_instance->char_rx_buffer, buffer_len);
+    slcan_instance->char_rx_remain = rc;
 
-    rt_memset(&(slcan_instance->chardev_rx_buffer[slcan_instance->chardev_rx_remain]), 0, (buffer_max - slcan_instance->chardev_rx_remain));
+    rt_memset(&(slcan_instance->char_rx_buffer[slcan_instance->char_rx_remain]), 0, (buffer_max - slcan_instance->char_rx_remain));
 
-    if(buffer_len != slcan_instance->chardev_rx_remain)
+    if(buffer_len != slcan_instance->char_rx_remain)
     {
         //when buffer_len != remain print
-        SLCAN_LOG_D(slcan_instance, "[%s >> %s] remain:%d buffer:%s ",slcan_instance->chardev_name, slcan_instance->candev_name,slcan_instance->chardev_rx_remain, rx_buffer);
+        SLCAN_LOG_D(slcan_instance, "[%s >> %s] remain:%d buffer:%s ",slcan_instance->serialdev_name, slcan_instance->candev_name, slcan_instance->char_rx_remain, rx_buffer);
     }
 }
 
@@ -596,13 +596,14 @@ void slcan_process_can(rt_slcan_t* slcan_instance)
         {
             break;
         }
-        tx_len = slcan_can2ascii(slcan_instance, &(slcan_instance->can_msg) , (char *)slcan_instance->chardev_tx_buffer );
+        tx_len = slcan_can2ascii(slcan_instance, &(slcan_instance->can_msg) , (char *)slcan_instance->char_tx_buffer );
         if(tx_len <= 0)
         {
             break;
         }
-        SLCAN_LOG_D(slcan_instance, "[%s << %s] len:%d buffer:%s",slcan_instance->chardev_name, slcan_instance->candev_name, tx_len, slcan_instance->chardev_tx_buffer);
-        slcan_rtchar_write(slcan_instance, slcan_instance->chardev_tx_buffer, tx_len);
+        slcan_rtserial_write(slcan_instance, slcan_instance->char_tx_buffer, tx_len);
+        SLCAN_LOG_D(slcan_instance, "[%s << %s] len:%d buffer:%s",
+                slcan_instance->serialdev_name, slcan_instance->candev_name, tx_len, slcan_instance->char_tx_buffer);
     }while(1);
 }
 
@@ -613,9 +614,9 @@ void slcan_process_task(void *instance)
 
     slcan_instance->run_state = 1;
     slcan_instance->run_flag = 0;
-    slcan_rtchar_open(slcan_instance);
+    slcan_rtserial_open(slcan_instance);
     slcan_rtcan_open(slcan_instance);
-    SLCAN_LOG_D(slcan_instance, "[%s <=> %s] slcan start",slcan_instance->chardev_name, slcan_instance->candev_name);
+    SLCAN_LOG_D(slcan_instance, "[%s <=> %s] slcan start",slcan_instance->serialdev_name, slcan_instance->candev_name);
 
     while(!(slcan_instance->run_flag & SLCAN_RFLAG_EXIT))
     {
@@ -626,9 +627,9 @@ void slcan_process_task(void *instance)
         // process char data
         slcan_process_serial(slcan_instance);
     }
-    slcan_rtchar_close(slcan_instance);
+    slcan_rtserial_close(slcan_instance);
     slcan_rtcan_close(slcan_instance);
-    SLCAN_LOG_D(slcan_instance, "[%s <=> %s] slcan exit",slcan_instance->chardev_name, slcan_instance->candev_name);
+    SLCAN_LOG_D(slcan_instance, "[%s <=> %s] slcan exit",slcan_instance->serialdev_name, slcan_instance->candev_name);
     slcan_instance->run_state = 0;
 }
 
@@ -640,9 +641,9 @@ void slcan_instance_exit(rt_slcan_t* slcan_instance)
     {
         slcan_instance->candev_rx_call(slcan_instance->candev, 0);
     }
-    if(slcan_instance->chardev_rx_call != NULL)
+    if(slcan_instance->serialdev_rx_call != NULL)
     {
-        slcan_instance->chardev_rx_call(slcan_instance->chardev, 0);
+        slcan_instance->serialdev_rx_call(slcan_instance->serialdev, 0);
     }
     while(slcan_instance->run_state != 0)
     {
@@ -684,10 +685,10 @@ _fail:
     return -1;
 }
 
-rt_slcan_t* slcan_instance_create(char * chardev_name, char * candev_name)
+rt_slcan_t* slcan_instance_create(const char * serialdev_name,const char * candev_name)
 {
     rt_slcan_t* slcan_instance = NULL;
-    if( (chardev_name== NULL) && (candev_name== NULL) )
+    if( (serialdev_name== NULL) && (candev_name== NULL) )
     {
         goto _fail;
     }
@@ -698,15 +699,15 @@ rt_slcan_t* slcan_instance_create(char * chardev_name, char * candev_name)
     }
     rt_memset(slcan_instance, 0, sizeof(rt_slcan_t));
 
-    slcan_instance->chardev_name = chardev_name;
-    slcan_instance->chardev = rt_device_find(slcan_instance->chardev_name);
-    slcan_instance->chardev_oflag = RT_DEVICE_FLAG_INT_RX;
+    slcan_instance->serialdev_name = serialdev_name;
+    slcan_instance->serialdev = rt_device_find(slcan_instance->serialdev_name);
+    slcan_instance->serialdev_oflag = RT_DEVICE_FLAG_INT_RX;
 
     slcan_instance->candev_name = candev_name;
     slcan_instance->candev = rt_device_find(slcan_instance->candev_name);
     slcan_instance->candev_oflag = RT_DEVICE_FLAG_INT_TX | RT_DEVICE_FLAG_INT_RX;
 
-    if( (slcan_instance->chardev == NULL) || (slcan_instance->candev == NULL))
+    if( (slcan_instance->serialdev == NULL) || (slcan_instance->candev == NULL))
     {
         rt_free(slcan_instance);
         slcan_instance = NULL;
