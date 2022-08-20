@@ -74,14 +74,24 @@ uint32_t  can_mode_sclcan2rtthread(uint8_t can_mode_index)
         case SLCAN_MODE_NORMAL:
             mode = RT_CAN_MODE_NORMAL;
             break;
-        case SLCAN_MODE_LISEN:
+        case SLCAN_MODE_LISTEN:
+#if RT_CAN_MODE_LISEN
             mode = RT_CAN_MODE_LISEN;
+#endif
+#if RT_CAN_MODE_LISTEN
+            mode = RT_CAN_MODE_LISTEN;
+#endif
             break;
         case SLCAN_MODE_LOOPBACK:
             mode = RT_CAN_MODE_LOOPBACK;
             break;
-        case SLCAN_MODE_LOOPBACKANLISEN:
+        case SLCAN_MODE_LOOPBACKANLISTEN:
+#if RT_CAN_MODE_LOOPBACKANLISEN
             mode = RT_CAN_MODE_LOOPBACKANLISEN;
+#endif
+#if RT_CAN_MODE_LOOPBACKANLISTEN
+            mode = RT_CAN_MODE_LOOPBACKANLISTEN;
+#endif
             break;
     }
     return mode;
